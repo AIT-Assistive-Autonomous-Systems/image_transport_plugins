@@ -59,12 +59,11 @@ namespace compressed_depth_image_transport
 
 void CompressedDepthPublisher::advertiseImpl(
   rclcpp::Node * node,
-  const std::string& base_topic,
-  rmw_qos_profile_t custom_qos,
-  rclcpp::PublisherOptions options)
+  const std::string & base_topic,
+  rmw_qos_profile_t custom_qos)
 {
   typedef image_transport::SimplePublisherPlugin<sensor_msgs::msg::CompressedImage> Base;
-  Base::advertiseImpl(node, base_topic, custom_qos, options);
+  Base::advertiseImpl(node, base_topic, custom_qos);
 
   uint ns_len = node->get_effective_namespace().length();
   std::string param_base_name = base_topic.substr(ns_len);
@@ -118,16 +117,16 @@ void CompressedDepthPublisher::advertiseImpl(
 }
 
 void CompressedDepthPublisher::publish(
-  const sensor_msgs::msg::Image& message,
-  const PublishFn& publish_fn) const
+  const sensor_msgs::msg::Image & message,
+  const PublishFn & publish_fn) const
 {
   sensor_msgs::msg::CompressedImage::SharedPtr compressed_image =
-    encodeCompressedDepthImage(message,
-                               config_.depth_max,
-                               config_.depth_quantization,
-                               config_.png_level);
-  if (compressed_image)
-  {
+    encodeCompressedDepthImage(
+    message,
+    config_.depth_max,
+    config_.depth_quantization,
+    config_.png_level);
+  if (compressed_image) {
     publish_fn(*compressed_image);
   }
 }

@@ -53,6 +53,12 @@ public:
 protected:
   virtual void internalCallback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr& message,
                                 const Callback& user_cb);
+
+  void subscribeImpl(
+    rclcpp::Node * node,
+    const std::string & base_topic,
+    const Callback & callback,
+    rmw_qos_profile_t custom_qos) override;
 };
 
 } //namespace compressed_depth_image_transport
