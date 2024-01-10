@@ -42,6 +42,7 @@
 #include <rclcpp/node.hpp>
 
 #include "compressed_image_transport/compression_common.h"
+#include "compressed_image_transport/image_encoder.h"
 
 namespace compressed_image_transport {
 
@@ -74,6 +75,7 @@ protected:
   rclcpp::Node * node_;
 
 private:
+  mutable ImageEncoder encoder_;
   std::vector<std::string> parameters_;
   std::vector<std::string> deprecatedParameters_;
 
