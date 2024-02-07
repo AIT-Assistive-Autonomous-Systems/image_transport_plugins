@@ -38,27 +38,14 @@
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
-#include "compression_common.h"
+#include "compressed_image_transport/encoder.h"
 
 namespace compressed_image_transport {
 
-class ImageEncoder {
+class JpegEncoder : public Encoder {
  public:
-  ImageEncoder() : logger_(rclcpp::get_logger("ImageEncoder")), encoding_format_{UNDEFINED}, bit_depth_{0} {}
+  JpegEncoder(const std::string& image_encoding, int jpeg_quality);
 
-  bool encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& output) const;
-
-  void setToJpegCompression(const std::string& encoding, int jpeg_quality);
-  void setToPngCompression(const std::string& encoding, int png_level);
-  void setToTiffCompression(const std::string& encoding, int xdpi, int ydpi, int res_unit);
-
- private:
-  rclcpp::Logger logger_;
-  compressionFormat encoding_format_;
-
-  int bit_depth_;
-  std::string format_;
-  std::string format_description_;
-  std::vector<int> params_;
+  bool encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& output) const override;
 };
 }  // namespace compressed_image_transport

@@ -27,7 +27,10 @@ add_library(
   SHARED
   src/compressed_publisher.cpp
   src/compressed_subscriber.cpp
-  src/image_encoder.cpp
+  src/encoder.cpp
+  src/jpeg_encoder.cpp
+  src/png_encoder.cpp
+  src/tiff_encoder.cpp
   src/manifest.cpp
 )
 

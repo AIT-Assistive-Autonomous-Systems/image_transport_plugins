@@ -39,7 +39,10 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include "compressed_image_transport/compression_common.h"
-
+#include "compressed_image_transport/encoder.h"
+#include "compressed_image_transport/encoders/jpeg_encoder.h"
+#include "compressed_image_transport/encoders/png_encoder.h"
+#include "compressed_image_transport/encoders/tiff_encoder.h"
 #include <rclcpp/exceptions/exceptions.hpp>
 #include <rclcpp/parameter_client.hpp>
 #include <rclcpp/parameter_events_filter.hpp>
@@ -62,7 +65,8 @@ enum compressedParameters
   JPEG_QUALITY,
   TIFF_RESOLUTION_UNIT,
   TIFF_XDPI,
-  TIFF_YDPI
+  TIFF_YDPI,
+  USE_CACHE
 };
 
 const struct ParameterDefinition kParameters[] =
@@ -126,6 +130,14 @@ const struct ParameterDefinition kParameters[] =
       .set__type(rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER)
       .set__description("tiff ydpi")
       .set__read_only(false)
+  },
+  { //TIFF_YDPI
+    ParameterValue((int)-1),
+    ParameterDescriptor()
+      .set__name("use_cache")
+      .set__type(rcl_interfaces::msg::ParameterType::PARAMETER_BOOL)
+      .set__description("Cache compressed image message for reuse")
+      .set__read_only(false)
   }
 };
 
@@ -158,67 +170,18 @@ void CompressedPublisher::publish(
   const sensor_msgs::msg::Image& message,
   const PublishFn& publish_fn) const
 {
-  // Fresh Configuration
-  std::string cfg_format = node_->get_parameter(parameters_[FORMAT]).get_value<std::string>();
-  int cfg_png_level = node_->get_parameter(parameters_[PNG_LEVEL]).get_value<int64_t>();
-  int cfg_jpeg_quality = node_->get_parameter(parameters_[JPEG_QUALITY]).get_value<int64_t>();;
-  std::string cfg_tiff_res_unit = node_->get_parameter(parameters_[TIFF_RESOLUTION_UNIT]).get_value<std::string>();
-  int cfg_tiff_xdpi = node_->get_parameter(parameters_[TIFF_XDPI]).get_value<int64_t>();
-  int cfg_tiff_ydpi = node_->get_parameter(parameters_[TIFF_YDPI]).get_value<int64_t>();
+  auto encoder = buildEncoderFor(message.encoding);
 
-  compressionFormat encodingFormat = UNDEFINED;
-  if (cfg_format == "jpeg") {
-    encodingFormat = JPEG;
-  } else if (cfg_format == "png") {
-    encodingFormat = PNG;
-  } else if (cfg_format == "tiff") {
-    encodingFormat = TIFF;
-  }
+  bool cfg_use_cache = node_->get_parameter(parameters_[USE_CACHE]).get_value<bool>();
 
-  switch (encodingFormat)
-  {
-    // JPEG Compression
-    case JPEG:
-    {
-      encoder_.setToJpegCompression(message.encoding, cfg_jpeg_quality);
-      break;
+  if (cfg_use_cache) {
+    if (encoder->encode(message, compressed_image_cache_)) {
+      publish_fn(compressed_image_cache_);
     }
-    // PNG Compression
-    case PNG:
-    {
-      encoder_.setToPngCompression(message.encoding, cfg_png_level);
-      break;
+  } else {
+    if (auto compressed = encoder->encode(message)) {
+      publish_fn(*compressed);
     }
-    // TIFF Compression
-    case TIFF:
-    {
-      int res_unit = -1;
-      // See https://gitlab.com/libtiff/libtiff/-/blob/v4.3.0/libtiff/tiff.h#L282-284
-      if (cfg_tiff_res_unit == "inch") {
-        res_unit = 2;
-      } else if (cfg_tiff_res_unit == "centimeter") {
-        res_unit = 3;
-      } else if (cfg_tiff_res_unit == "none") {
-        res_unit = 1;
-      } else {
-        RCLCPP_WARN(
-          logger_,
-          "tiff.res_unit parameter should be either 'inch', 'centimeter' or 'none'; "
-          "defaulting to 'inch'. Found '%s'", cfg_tiff_res_unit.c_str());
-      }
-
-      encoder_.setToTiffCompression(message.encoding, cfg_tiff_xdpi, cfg_tiff_ydpi, res_unit);
-      break;
-    }
-
-    default:
-      RCUTILS_LOG_ERROR("Unknown compression type '%s', valid options are 'jpeg', 'png' and 'tiff'", cfg_format.c_str());
-      break;
-  }
-
-  sensor_msgs::msg::CompressedImage compressed;
-  if (encoder_.encode(message, compressed)) {
-    publish_fn(compressed);
   }
 }
 
@@ -284,6 +247,65 @@ void CompressedPublisher::onParameterEvent(ParameterEvent::SharedPtr event, std:
                                 "; use transport qualified name `" << recommendedName << "`");
 
     node_->set_parameter(rclcpp::Parameter(recommendedName, it.second->value));
+  }
+}
+
+std::unique_ptr<Encoder> CompressedPublisher::buildEncoderFor(const std::string& image_encoding) const
+{
+  // Fresh Configuration
+  std::string cfg_format = node_->get_parameter(parameters_[FORMAT]).get_value<std::string>();
+  
+  compressionFormat encodingFormat = UNDEFINED;
+  if (cfg_format == "jpeg") {
+    encodingFormat = JPEG;
+  } else if (cfg_format == "png") {
+    encodingFormat = PNG;
+  } else if (cfg_format == "tiff") {
+    encodingFormat = TIFF;
+  }
+
+  switch (encodingFormat)
+  {
+    // JPEG Compression
+    case JPEG:
+    {
+      int cfg_jpeg_quality = node_->get_parameter(parameters_[JPEG_QUALITY]).get_value<int64_t>();
+      return std::make_unique<JpegEncoder>(image_encoding, cfg_jpeg_quality);
+    }
+    // PNG Compression
+    case PNG:
+    {
+      int cfg_png_level = node_->get_parameter(parameters_[PNG_LEVEL]).get_value<int64_t>();
+      return std::make_unique<PngEncoder>(image_encoding, cfg_png_level);
+    }
+    // TIFF Compression
+    case TIFF:
+    {
+      std::string cfg_tiff_res_unit = node_->get_parameter(parameters_[TIFF_RESOLUTION_UNIT]).get_value<std::string>();
+      int cfg_tiff_xdpi = node_->get_parameter(parameters_[TIFF_XDPI]).get_value<int64_t>();
+      int cfg_tiff_ydpi = node_->get_parameter(parameters_[TIFF_YDPI]).get_value<int64_t>();
+      
+      int res_unit = -1;
+      // See https://gitlab.com/libtiff/libtiff/-/blob/v4.3.0/libtiff/tiff.h#L282-284
+      if (cfg_tiff_res_unit == "inch") {
+        res_unit = 2;
+      } else if (cfg_tiff_res_unit == "centimeter") {
+        res_unit = 3;
+      } else if (cfg_tiff_res_unit == "none") {
+        res_unit = 1;
+      } else {
+        RCLCPP_WARN(
+          logger_,
+          "tiff.res_unit parameter should be either 'inch', 'centimeter' or 'none'; "
+          "defaulting to 'inch'. Found '%s'", cfg_tiff_res_unit.c_str());
+      }
+
+      return std::make_unique<TiffEncoder>(image_encoding, cfg_tiff_xdpi, cfg_tiff_ydpi, res_unit);
+    }
+
+    default:
+      RCUTILS_LOG_ERROR("Unknown compression type '%s', valid options are 'jpeg', 'png' and 'tiff'", cfg_format.c_str());
+      break;
   }
 }
 
