@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <cv_bridge/cv_bridge.hpp>
 #include <optional>
 #include <rclcpp/logger.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
@@ -46,11 +47,13 @@ namespace compressed_image_transport {
 class Encoder {
  public:
   std::optional<sensor_msgs::msg::CompressedImage> encode(const sensor_msgs::msg::Image& message);
-  
+
   virtual bool encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& output) const = 0;
+  virtual bool encode(const std_msgs::msg::Header& header, const cv::Mat& mat,
+                      sensor_msgs::msg::CompressedImage& output) const = 0;
 
  protected:
-  Encoder(rclcpp::Logger logger) : logger_(logger),  bit_depth_{0}, format_{""}, format_description_{""}, params_{} {};
+  Encoder(rclcpp::Logger logger) : logger_(logger), bit_depth_{0}, format_{""}, format_description_{""}, params_{} {};
 
   rclcpp::Logger logger_;
 

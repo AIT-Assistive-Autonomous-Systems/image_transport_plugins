@@ -56,7 +56,7 @@ JpegEncoder::JpegEncoder(const std::string& image_encoding, int jpeg_quality)
   bit_depth_ = enc::bitDepth(image_encoding);
 
   // Jpeg specific
-  params_.emplace_back(cv::IMWRITE_PNG_COMPRESSION);
+  params_.emplace_back(cv::IMWRITE_JPEG_QUALITY);
   params_.emplace_back(jpeg_quality);
 
   format_description_ += "; jpeg compressed ";
@@ -80,17 +80,20 @@ JpegEncoder::JpegEncoder(const std::string& image_encoding, int jpeg_quality)
 }
 
 bool JpegEncoder::encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& compressed) const {
-  compressed.header = message.header;
+  cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, nullptr, format_);
+  return encode(message.header, cv_ptr->image, compressed);
+}
+
+bool JpegEncoder::encode(const std_msgs::msg::Header& header, const cv::Mat& mat,
+                         sensor_msgs::msg::CompressedImage& compressed) const {
+  compressed.header = header;
   compressed.format = format_description_;
 
   // OpenCV-ros bridge
   try {
-    std::shared_ptr<CompressedPublisher> tracked_object;
-    cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, tracked_object, format_);
-
     // Compress image
-    if (cv::imencode(".jpg", cv_ptr->image, compressed.data, params_)) {
-      float cRatio = (float)(cv_ptr->image.rows * cv_ptr->image.cols * cv_ptr->image.elemSize()) /
+    if (cv::imencode(".jpg", mat, compressed.data, params_)) {
+      float cRatio = (float)(mat.rows * mat.cols * mat.elemSize()) /
                       (float)compressed.data.size();
       RCLCPP_DEBUG(logger_, "Compressed Image Transport - Codec: jpg, Compression Ratio: 1:%.2f (%lu bytes)",
                     cRatio, compressed.data.size());

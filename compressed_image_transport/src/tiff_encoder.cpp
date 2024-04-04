@@ -74,16 +74,21 @@ TiffEncoder::TiffEncoder(const std::string& image_encoding, int xdpi, int ydpi, 
 }
 
 bool TiffEncoder::encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& compressed) const {
-  compressed.header = message.header;
+  cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, nullptr, "");
+
+  return encode(message.header, cv_ptr->image, compressed);
+}
+
+bool TiffEncoder::encode(const std_msgs::msg::Header& header, const cv::Mat& mat,
+                         sensor_msgs::msg::CompressedImage& compressed) const {
+  compressed.header = header;
   compressed.format = format_description_;
 
   try {
-    cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, nullptr, "");
-
     // Compress image
-    if (cv::imencode(".tiff", cv_ptr->image, compressed.data, params_)) {
-      float cRatio = static_cast<float>((cv_ptr->image.rows * cv_ptr->image.cols * cv_ptr->image.elemSize())) /
-                      static_cast<float>((float)compressed.data.size());
+    if (cv::imencode(".tiff", mat, compressed.data, params_)) {
+      float cRatio = static_cast<float>((mat.rows * mat.cols * mat.elemSize())) /
+                     static_cast<float>((float)compressed.data.size());
       RCUTILS_LOG_DEBUG("Compressed Image Transport - Codec: tiff, Compression Ratio: 1:%.2f (%lu bytes)", cRatio,
                         compressed.data.size());
 

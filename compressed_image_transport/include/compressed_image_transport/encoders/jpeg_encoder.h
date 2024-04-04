@@ -47,5 +47,7 @@ class JpegEncoder : public Encoder {
   JpegEncoder(const std::string& image_encoding, int jpeg_quality);
 
   bool encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& output) const override;
+  bool encode(const std_msgs::msg::Header& header, const cv::Mat& mat,
+              sensor_msgs::msg::CompressedImage& output) const override;
 };
 }  // namespace compressed_image_transport

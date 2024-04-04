@@ -78,17 +78,20 @@ PngEncoder::PngEncoder(const std::string& image_encoding, int png_level)
 }
 
 bool PngEncoder::encode(const sensor_msgs::msg::Image& message, sensor_msgs::msg::CompressedImage& compressed) const {
-  compressed.header = message.header;
+  cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, nullptr, format_);
+  return encode(message.header, cv_ptr->image, compressed);
+}
+
+bool PngEncoder::encode(const std_msgs::msg::Header& header, const cv::Mat& mat,
+                         sensor_msgs::msg::CompressedImage& compressed) const {
+  compressed.header = header;
   compressed.format = format_description_;
 
   // OpenCV-ros bridge
   try {
-    std::shared_ptr<CompressedPublisher> tracked_object;
-    cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(message, tracked_object, format_);
-
     // Compress image
-    if (cv::imencode(".png", cv_ptr->image, compressed.data, params_)) {
-      float cRatio = (float)(cv_ptr->image.rows * cv_ptr->image.cols * cv_ptr->image.elemSize()) /
+    if (cv::imencode(".png", mat, compressed.data, params_)) {
+      float cRatio = (float)(mat.rows * mat.cols * mat.elemSize()) /
                       (float)compressed.data.size();
       RCUTILS_LOG_DEBUG("Compressed Image Transport - Codec: png, Compression Ratio: 1:%.2f (%lu bytes)", cRatio,
                         compressed.data.size());

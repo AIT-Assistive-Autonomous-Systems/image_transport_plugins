@@ -46,6 +46,7 @@
 #include <rclcpp/exceptions/exceptions.hpp>
 #include <rclcpp/parameter_client.hpp>
 #include <rclcpp/parameter_events_filter.hpp>
+#include <tracy/Tracy.hpp>
 
 #include <sstream>
 #include <vector>
@@ -131,8 +132,8 @@ const struct ParameterDefinition kParameters[] =
       .set__description("tiff ydpi")
       .set__read_only(false)
   },
-  { //TIFF_YDPI
-    ParameterValue((int)-1),
+  { //CACHE
+    ParameterValue((bool)false),
     ParameterDescriptor()
       .set__name("use_cache")
       .set__type(rcl_interfaces::msg::ParameterType::PARAMETER_BOOL)
@@ -170,15 +171,21 @@ void CompressedPublisher::publish(
   const sensor_msgs::msg::Image& message,
   const PublishFn& publish_fn) const
 {
+  ZoneNamedN(frame, "compressed_publish", true);  // NOLINT: Profiler
+
   auto encoder = buildEncoderFor(message.encoding);
 
   bool cfg_use_cache = node_->get_parameter(parameters_[USE_CACHE]).get_value<bool>();
 
   if (cfg_use_cache) {
+    ZoneNamedN(cached, "cached_encoding", true);  // NOLINT: Profiler
+
     if (encoder->encode(message, compressed_image_cache_)) {
       publish_fn(compressed_image_cache_);
     }
   } else {
+    ZoneNamedN(encoding, "encoding", true);  // NOLINT: Profiler
+
     if (auto compressed = encoder->encode(message)) {
       publish_fn(*compressed);
     }
@@ -252,6 +259,7 @@ void CompressedPublisher::onParameterEvent(ParameterEvent::SharedPtr event, std:
 
 std::unique_ptr<Encoder> CompressedPublisher::buildEncoderFor(const std::string& image_encoding) const
 {
+  ZoneNamedN(build, "build", true);  // NOLINT: Profiler
   // Fresh Configuration
   std::string cfg_format = node_->get_parameter(parameters_[FORMAT]).get_value<std::string>();
   

@@ -17,10 +17,10 @@ find_package(cv_bridge REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
-
+find_package(tracy_profiler REQUIRED)
 find_package(OpenCV REQUIRED)
 
-include_directories(include ${OpenCV_INCLUDE_DIRS})
+include_directories(include ${OpenCV_INCLUDE_DIRS} ${tracy_profiler_INCLUDE_DIRS})
 
 add_library(
   ${PROJECT_NAME}
@@ -42,6 +42,12 @@ ament_target_dependencies(${PROJECT_NAME}
   "rclcpp"
   "pluginlib"
   "sensor_msgs"
+  "tracy_profiler"
+)
+
+option(TRACY_ENABLE "Enable profiling" ON)
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+  TRACY_ENABLE
 )
 
 install(TARGETS ${PROJECT_NAME}
